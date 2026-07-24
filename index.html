@@ -1,0 +1,1419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tool Ergonomics Sandbox - lint and hand-test your LLM tool definitions</title>
+<meta name="description" content="Load your LLM tool definitions, lint them for the ambiguities that trip models, then play the model yourself: build tool calls by hand against live schema validation and export the transcript as an eval case.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="canonical" href="https://0xelitesystem.github.io/tool-ergonomics-sandbox/">
+<meta property="og:title" content="Tool Ergonomics Sandbox">
+<meta property="og:description" content="If a human cannot complete the task with your tools, the model cannot either. Lint tool definitions, play the model by hand, export eval cases.">
+<meta property="og:url" content="https://0xelitesystem.github.io/tool-ergonomics-sandbox/">
+<meta property="og:type" content="website">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Tool Ergonomics Sandbox",
+  "description": "Load LLM tool definitions, lint them for model-tripping ambiguity, issue tool calls by hand against live schema validation, and export the transcript as an eval case.",
+  "url": "https://0xelitesystem.github.io/tool-ergonomics-sandbox/",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Any",
+  "offers": { "@type": "Offer", "price": 0, "priceCurrency": "USD" }
+}
+</script>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0e1116;
+  --bg-glow: rgba(240, 165, 72, 0.07);
+  --grid-line: rgba(148, 163, 184, 0.045);
+  --panel: #151b23;
+  --panel2: #1b232e;
+  --border: #2b3644;
+  --border-strong: #3d4b5d;
+  --text: #dbe4ee;
+  --muted: #8b9bae;
+  --accent: #f0a848;
+  --accent-ink: #201302;
+  --accent-soft: rgba(240, 168, 72, 0.14);
+  --err-fg: #ff8177;
+  --err-bg: rgba(255, 110, 100, 0.12);
+  --warn-fg: #e5c063;
+  --warn-bg: rgba(229, 192, 99, 0.12);
+  --info-fg: #7fb8ff;
+  --info-bg: rgba(127, 184, 255, 0.12);
+  --ok-fg: #5fd38a;
+  --ok-bg: rgba(95, 211, 138, 0.12);
+  --code-bg: #10151c;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f1e8;
+  --bg-glow: rgba(194, 65, 12, 0.05);
+  --grid-line: rgba(60, 50, 30, 0.05);
+  --panel: #fdfbf5;
+  --panel2: #f2ecdf;
+  --border: #ddd3bf;
+  --border-strong: #c4b79c;
+  --text: #26241e;
+  --muted: #6d6754;
+  --accent: #b4520e;
+  --accent-ink: #fff6ea;
+  --accent-soft: rgba(180, 82, 14, 0.1);
+  --err-fg: #b42318;
+  --err-bg: rgba(180, 35, 24, 0.09);
+  --warn-fg: #8a5b00;
+  --warn-bg: rgba(160, 110, 0, 0.11);
+  --info-fg: #175cd3;
+  --info-bg: rgba(23, 92, 211, 0.09);
+  --ok-fg: #067647;
+  --ok-bg: rgba(6, 118, 71, 0.1);
+  --code-bg: #efe9db;
+  --shadow: 0 6px 18px rgba(90, 70, 30, 0.12);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: "Seravek", "Trebuchet MS", "Ubuntu", "Gill Sans", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text);
+  background:
+    radial-gradient(60rem 30rem at 50% -8rem, var(--bg-glow), transparent 70%),
+    repeating-linear-gradient(0deg, transparent 0, transparent 31px, var(--grid-line) 31px, var(--grid-line) 32px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 31px, var(--grid-line) 31px, var(--grid-line) 32px),
+    var(--bg);
+}
+code, pre, textarea.json, .mono {
+  font-family: "Cascadia Code", "JetBrains Mono", "Fira Code", "SF Mono", Consolas, Menlo, monospace;
+}
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+a { color: var(--accent); }
+a:hover { text-decoration: none; }
+
+/* ---------- header ---------- */
+header.site { padding: 40px 0 8px; }
+.masthead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.eyebrow {
+  font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px;
+}
+.eyebrow .tick { color: var(--accent); }
+h1 {
+  font-family: "Charter", "Bitstream Charter", "Sitka Display", Cambria, Georgia, serif;
+  font-size: clamp(30px, 5vw, 46px);
+  line-height: 1.08; margin: 0 0 14px; letter-spacing: -0.01em;
+}
+.thesis {
+  font-family: "Charter", "Bitstream Charter", "Sitka Display", Cambria, Georgia, serif;
+  font-style: italic; font-size: clamp(18px, 2.6vw, 23px);
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 16px; margin: 0 0 10px; max-width: 46ch;
+}
+.subthesis { color: var(--muted); max-width: 70ch; margin: 0 0 26px; }
+
+/* ---------- buttons / chips ---------- */
+button {
+  font: inherit; color: var(--text); cursor: pointer;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 14px;
+  transition: border-color 0.15s, background 0.15s, transform 0.05s;
+}
+button:hover { border-color: var(--border-strong); }
+button:active { transform: translateY(1px); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+button:disabled { opacity: 0.6; cursor: default; }
+.btn-primary {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
+}
+.btn-primary:hover { filter: brightness(1.06); border-color: var(--accent); }
+.btn-ghost { background: transparent; }
+.btn-sm { padding: 5px 10px; font-size: 13.5px; }
+.chip {
+  display: inline-block; font-size: 12px; letter-spacing: 0.06em;
+  padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border);
+  color: var(--muted); background: var(--panel2);
+  text-transform: uppercase;
+}
+.chip.fmt { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.sev {
+  display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 2px 8px; border-radius: 5px; text-transform: uppercase;
+}
+.sev-error { color: var(--err-fg); background: var(--err-bg); }
+.sev-warn  { color: var(--warn-fg); background: var(--warn-bg); }
+.sev-info  { color: var(--info-fg); background: var(--info-bg); }
+.badge-pass { color: var(--ok-fg); background: var(--ok-bg); }
+.badge-fail { color: var(--err-fg); background: var(--err-bg); }
+.badge-pass, .badge-fail {
+  display: inline-block; font-weight: 700; font-size: 12px; letter-spacing: 0.08em;
+  padding: 2px 9px; border-radius: 5px;
+}
+
+/* ---------- panels ---------- */
+main { display: grid; gap: 22px; padding-bottom: 24px; }
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+section.panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: var(--shadow); overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+}
+.step-num {
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
+  color: var(--accent); font-size: 13px; letter-spacing: 0.1em;
+}
+.panel-head h2 { font-size: 19px; margin: 0; letter-spacing: 0.01em; }
+.panel-head .hint { color: var(--muted); font-size: 13.5px; flex-basis: 100%; margin: 2px 0 0; }
+.panel-body { padding: 16px 20px 20px; }
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0 0; }
+.spacer { flex: 1; }
+
+/* ---------- inputs ---------- */
+textarea, input[type="text"], input[type="number"], select {
+  width: 100%; font: inherit; color: var(--text);
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 11px;
+}
+textarea { resize: vertical; }
+textarea.json, #defsInput { font-size: 13.5px; line-height: 1.5; }
+#defsInput { min-height: 230px; white-space: pre; }
+::placeholder { color: var(--muted); opacity: 0.8; }
+label.field-label { display: block; font-weight: 600; font-size: 14.5px; margin: 0 0 4px; }
+.type-tag {
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
+  font-weight: 400; font-size: 11.5px; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; margin-left: 8px;
+}
+.req-star { color: var(--err-fg); font-weight: 700; margin-left: 3px; }
+.field { margin: 0 0 16px; }
+.field .help { font-size: 13px; color: var(--muted); margin: 5px 0 0; }
+.field .help.missing { font-style: italic; }
+.field .constraints {
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
+  font-size: 12px; color: var(--muted); margin: 4px 0 0;
+}
+
+/* ---------- code / output ---------- */
+pre {
+  background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin: 10px 0 0; font-size: 13px; line-height: 1.5;
+  overflow-x: auto;
+}
+.status-line { margin: 12px 0 0; font-size: 14px; }
+.status-line .detail { color: var(--muted); }
+.error-box {
+  margin: 12px 0 0; padding: 12px 14px; border-radius: 8px;
+  background: var(--err-bg); border: 1px solid var(--err-fg); color: var(--err-fg);
+  font-size: 14px;
+}
+.error-box pre { background: transparent; border: none; padding: 8px 0 0; margin: 0; color: inherit; }
+
+/* ---------- lint ---------- */
+.lint-summary { margin: 0 0 12px; font-size: 14px; color: var(--muted); }
+ul.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+ul.findings li {
+  border: 1px solid var(--border); border-left-width: 3px; border-radius: 8px;
+  padding: 10px 14px; background: var(--panel2);
+}
+ul.findings li.f-error { border-left-color: var(--err-fg); }
+ul.findings li.f-warn  { border-left-color: var(--warn-fg); }
+ul.findings li.f-info  { border-left-color: var(--info-fg); }
+.finding-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.finding-tool {
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
+  font-size: 12.5px; color: var(--muted);
+}
+.finding-title { margin: 6px 0 0; font-size: 14.5px; }
+.finding-why { margin: 5px 0 0; font-size: 13px; color: var(--muted); }
+.finding-why b { color: var(--accent); font-weight: 600; }
+
+/* ---------- play ---------- */
+.play-grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+.tool-list { display: grid; gap: 8px; }
+.tool-list button {
+  text-align: left; padding: 10px 12px; width: 100%;
+}
+.tool-list button .tname {
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
+  font-size: 14px; display: block;
+}
+.tool-list button .tdesc {
+  display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tool-list button[aria-pressed="true"] {
+  border-color: var(--accent); background: var(--accent-soft);
+}
+.call-form { border: 1px dashed var(--border-strong); border-radius: 10px; padding: 16px 18px; }
+.call-form h3 {
+  margin: 0 0 4px; font-size: 17px;
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
+}
+.call-form .tool-desc { color: var(--muted); font-size: 13.5px; margin: 0 0 16px; }
+.empty {
+  color: var(--muted); font-size: 14px; padding: 22px 10px; text-align: center;
+  border: 1px dashed var(--border); border-radius: 10px;
+}
+#callResult ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; }
+#callResult li { color: var(--err-fg); margin: 3px 0; font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace; font-size: 12.5px; }
+
+/* ---------- transcript ---------- */
+.t-step {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 16px; margin: 0 0 12px; background: var(--panel2);
+}
+.t-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.t-head .idx { color: var(--muted); font-size: 13px; }
+.t-head .tname {
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace; font-size: 14.5px;
+}
+.t-head .when { color: var(--muted); font-size: 12px; margin-left: auto; }
+.t-step ul.t-errors { margin: 8px 0 0; padding-left: 20px; }
+.t-step ul.t-errors li {
+  color: var(--err-fg); font-size: 12.5px; margin: 2px 0;
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
+}
+.t-step .notes-label { display: block; font-size: 12.5px; color: var(--muted); margin: 10px 0 4px; }
+.t-step textarea { min-height: 40px; font-size: 13.5px; }
+
+/* ---------- footer ---------- */
+footer.site {
+  border-top: 1px solid var(--border); margin-top: 16px;
+  padding: 22px 0 34px; color: var(--muted); font-size: 13.5px;
+}
+footer.site .wrap { display: flex; gap: 8px 22px; flex-wrap: wrap; align-items: center; }
+
+@media (max-width: 860px) {
+  .duo { grid-template-columns: 1fr; }
+  .play-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .panel-body, .panel-head { padding-left: 14px; padding-right: 14px; }
+  header.site { padding-top: 26px; }
+}
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="masthead">
+      <p class="eyebrow"><span class="tick">//</span> elitesystem.ai tool house</p>
+      <button id="themeToggle" class="btn-sm" type="button" aria-label="Switch color theme">Light mode</button>
+    </div>
+    <h1>Tool Ergonomics Sandbox</h1>
+    <p class="thesis">If a human cannot complete the task with your tools, the model cannot either.</p>
+    <p class="subthesis">Paste your tool definitions, get an ergonomics lint, then play the model yourself:
+      pick a tool, fill its arguments using only what the definitions tell you, and submit against a real
+      schema validator. Every call lands in a transcript you can export as an eval case.
+      Everything runs in your browser; nothing you paste leaves the page.</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="duo">
+
+    <section class="panel" id="loadPanel" aria-labelledby="loadTitle">
+      <div class="panel-head">
+        <span class="step-num">01</span>
+        <h2 id="loadTitle">Load tool definitions</h2>
+        <p class="hint">Anthropic tools, OpenAI tools, or a bare array of name + description + schema. Format is auto-detected.</p>
+      </div>
+      <div class="panel-body">
+        <label class="field-label" for="defsInput">Tool definitions (JSON)</label>
+        <textarea id="defsInput" spellcheck="false" placeholder='Paste a JSON array of tool definitions here, or press "Load sample definitions" to see the lint catch three planted flaws.'></textarea>
+        <div class="toolbar">
+          <button id="parseBtn" class="btn-primary" type="button">Parse and lint</button>
+          <button id="sampleBtn" type="button">Load sample definitions</button>
+          <span class="spacer"></span>
+          <span id="formatBadge" class="chip" hidden></span>
+        </div>
+        <div id="parseStatus" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="lintPanel" aria-labelledby="lintTitle">
+      <div class="panel-head">
+        <span class="step-num">02</span>
+        <h2 id="lintTitle">Ergonomics lint</h2>
+        <p class="hint">Static checks for the ambiguities that make models pick the wrong tool or invent arguments.</p>
+      </div>
+      <div class="panel-body">
+        <p id="lintSummary" class="lint-summary" hidden></p>
+        <div id="lintEmpty" class="empty">Nothing loaded yet. Parse definitions on the left and the lint runs automatically.</div>
+        <ul id="lintFindings" class="findings" aria-live="polite"></ul>
+      </div>
+    </section>
+
+  </div>
+
+  <section class="panel" id="playPanel" aria-labelledby="playTitle">
+    <div class="panel-head">
+      <span class="step-num">03</span>
+      <h2 id="playTitle">Play the model</h2>
+      <p class="hint">Write yourself a task, then act as the model would: choose a tool and fill the arguments
+        using only what the definitions say. If you need to peek at your backend code to fill a field,
+        the model is worse off than you - it cannot peek.</p>
+    </div>
+    <div class="panel-body">
+      <div class="field">
+        <label class="field-label" for="taskInput">Your task</label>
+        <input type="text" id="taskInput" placeholder='e.g. "Book a 30 minute sync next Tuesday at 3pm and check the weather for the trip"'>
+        <p class="help">This becomes the "task" field of the exported eval case.</p>
+      </div>
+      <div class="play-grid">
+        <div>
+          <label class="field-label" id="toolListLabel">Available tools</label>
+          <div id="toolList" class="tool-list" role="group" aria-labelledby="toolListLabel">
+            <div class="empty">Load definitions in step 01 first.</div>
+          </div>
+        </div>
+        <div>
+          <div id="callFormWrap">
+            <div class="empty">Select a tool to generate its argument form from the schema.</div>
+          </div>
+          <div id="callResult" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="transcriptPanel" aria-labelledby="transcriptTitle">
+    <div class="panel-head">
+      <span class="step-num">04</span>
+      <h2 id="transcriptTitle">Transcript</h2>
+      <p class="hint">Chronological record of every call with args, validation outcome, and your notes on what confused you.</p>
+    </div>
+    <div class="panel-body">
+      <div class="toolbar" style="margin: 0 0 14px;">
+        <button id="exportJsonBtn" class="btn-primary btn-sm" type="button">Export eval case (JSON)</button>
+        <button id="copyMdBtn" class="btn-sm" type="button">Copy as Markdown</button>
+        <span class="spacer"></span>
+        <button id="clearTranscriptBtn" class="btn-ghost btn-sm" type="button">Clear transcript</button>
+      </div>
+      <div id="transcriptEmpty" class="empty">No calls yet. Submit a call in step 03 and it lands here with its validation outcome.</div>
+      <div id="transcriptList"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>An <a href="https://elitesystem.ai">elitesystem.ai</a> tool</span>
+    <a href="https://github.com/0xelitesystem/tool-ergonomics-sandbox">Source on GitHub</a>
+    <span>No external dependencies. Runs entirely in your browser.</span>
+  </div>
+</footer>
+
+<script>
+"use strict";
+(function () {
+
+  /* ---------------- helpers ---------------- */
+
+  function $(id) { return document.getElementById(id); }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        if (k === "text") { node.textContent = attrs[k]; }
+        else if (k === "class") { node.className = attrs[k]; }
+        else { node.setAttribute(k, attrs[k]); }
+      });
+    }
+    (children || []).forEach(function (c) { if (c) node.appendChild(c); });
+    return node;
+  }
+
+  function copyText(text, btn) {
+    var done = function () {
+      var old = btn.dataset.label || btn.textContent;
+      btn.dataset.label = old;
+      btn.textContent = "Copied";
+      btn.disabled = true;
+      setTimeout(function () { btn.textContent = old; btn.disabled = false; }, 1300);
+    };
+    var fallback = function () {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) { /* no-op */ }
+      document.body.removeChild(ta);
+      done();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function downloadJSON(obj, filename) {
+    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 500);
+  }
+
+  /* ---------------- theme ---------------- */
+
+  var THEME_KEY = "tes-theme";
+
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    $("themeToggle").textContent = t === "dark" ? "Light mode" : "Dark mode";
+  }
+
+  var storedTheme = null;
+  try { storedTheme = localStorage.getItem(THEME_KEY); } catch (e) { /* storage blocked */ }
+  applyTheme(storedTheme === "light" ? "light" : "dark");
+
+  $("themeToggle").addEventListener("click", function () {
+    var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* storage blocked */ }
+  });
+
+  /* ---------------- state ---------------- */
+
+  var tools = [];            // [{name, description, schema}]
+  var detectedFormat = null; // display string
+  var transcript = [];       // [{tool, args, valid, errors, notes, at}]
+  var currentToolIndex = -1;
+  var formFields = [];       // [{name, kind, input, enumValues, required}]
+
+  /* ---------------- parsing + format detection ---------------- */
+
+  function locateJSONError(text, err) {
+    var msg = err && err.message ? err.message : String(err);
+    var line = null, col = null, m;
+    m = /line (\d+) column (\d+)/i.exec(msg);
+    if (m) {
+      line = parseInt(m[1], 10);
+      col = parseInt(m[2], 10);
+    } else {
+      m = /position (\d+)/i.exec(msg);
+      if (m) {
+        var pos = parseInt(m[1], 10);
+        var upto = text.slice(0, pos);
+        line = upto.split("\n").length;
+        col = pos - upto.lastIndexOf("\n");
+      }
+    }
+    var context = "";
+    if (line !== null) {
+      var lines = text.split("\n");
+      var raw = lines[line - 1] !== undefined ? lines[line - 1] : "";
+      var caret = Math.max(1, Math.min(col || 1, raw.length + 1));
+      // keep long lines readable: window around the caret
+      var start = 0;
+      if (raw.length > 110) {
+        start = Math.max(0, caret - 55);
+        raw = (start > 0 ? "..." : "") + raw.slice(start, start + 104) + (start + 104 < raw.length ? "..." : "");
+        caret = caret - start + (start > 0 ? 3 : 0);
+      }
+      var prefix = "line " + line + ": ";
+      context = prefix + raw + "\n" + new Array(prefix.length + caret).join(" ") + "^";
+    }
+    return { msg: msg, line: line, col: col, context: context };
+  }
+
+  function detectItem(item) {
+    if (item && typeof item === "object" && item.type === "function" &&
+        item.function && typeof item.function === "object") return "openai";
+    if (item && typeof item === "object" && typeof item.name === "string" &&
+        item.input_schema && typeof item.input_schema === "object") return "anthropic";
+    if (item && typeof item === "object" && typeof item.name === "string") return "bare";
+    return "unknown";
+  }
+
+  function pickBareSchema(item) {
+    if (item.input_schema && typeof item.input_schema === "object") return item.input_schema;
+    if (item.inputSchema && typeof item.inputSchema === "object") return item.inputSchema;
+    if (item.parameters && typeof item.parameters === "object") return item.parameters;
+    if (item.schema && typeof item.schema === "object") return item.schema;
+    if (item.properties && typeof item.properties === "object") {
+      return {
+        type: item.type || "object",
+        properties: item.properties,
+        required: Array.isArray(item.required) ? item.required : undefined
+      };
+    }
+    return null;
+  }
+
+  function normalizeItem(item, kind) {
+    if (kind === "openai") {
+      var f = item.function;
+      return {
+        name: typeof f.name === "string" ? f.name : "",
+        description: typeof f.description === "string" ? f.description : "",
+        schema: (f.parameters && typeof f.parameters === "object") ? f.parameters : null
+      };
+    }
+    if (kind === "anthropic") {
+      return {
+        name: item.name,
+        description: typeof item.description === "string" ? item.description : "",
+        schema: item.input_schema
+      };
+    }
+    return {
+      name: item.name,
+      description: typeof item.description === "string" ? item.description : "",
+      schema: pickBareSchema(item)
+    };
+  }
+
+  function parseDefinitions(text) {
+    if (!text || !text.trim()) {
+      return { ok: false, error: "Nothing to parse. Paste a JSON array of tool definitions, or load the sample set." };
+    }
+    var data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      var loc = locateJSONError(text, e);
+      return { ok: false, error: "JSON parse error: " + loc.msg, context: loc.context };
+    }
+    var note = "";
+    if (!Array.isArray(data)) {
+      if (data && typeof data === "object" && Array.isArray(data.tools)) {
+        data = data.tools;
+        note = 'unwrapped the top-level "tools" key';
+      } else {
+        return { ok: false, error: 'Expected a JSON array of tool definitions (or an object with a "tools" array). Got ' + (data === null ? "null" : typeof data) + "." };
+      }
+    }
+    if (data.length === 0) {
+      return { ok: false, error: "The array is empty - there are no tools to lint." };
+    }
+    var kinds = [];
+    var normalized = [];
+    for (var i = 0; i < data.length; i++) {
+      var kind = detectItem(data[i]);
+      if (kind === "unknown") {
+        return { ok: false, error: "Item " + (i + 1) + ' is not a recognizable tool definition. Each item needs a top-level "name" (Anthropic / bare formats) or a "function" object with type "function" (OpenAI format).' };
+      }
+      kinds.push(kind);
+      var t = normalizeItem(data[i], kind);
+      if (!t.name || typeof t.name !== "string") {
+        return { ok: false, error: "Item " + (i + 1) + " has no usable tool name." };
+      }
+      normalized.push(t);
+    }
+    var uniform = kinds.every(function (k) { return k === kinds[0]; });
+    var label;
+    if (!uniform) {
+      label = "Mixed formats (per-item detection)";
+    } else if (kinds[0] === "openai") {
+      label = "OpenAI tools";
+    } else if (kinds[0] === "anthropic") {
+      label = "Anthropic tools";
+    } else {
+      label = "Bare tool array";
+    }
+    return { ok: true, tools: normalized, format: label, note: note };
+  }
+
+  /* ---------------- ergonomics lint ---------------- */
+
+  var VAGUE_NAMES = ["data", "input", "value", "val", "arg", "args", "param", "params",
+    "obj", "object", "info", "thing", "stuff", "foo", "bar", "tmp", "temp", "var", "misc"];
+
+  var ENUMISH_NAMES = /^(type|mode|status|kind|category|format|state|level|unit|sort|order|direction|priority|severity|method|style|lang|language|currency|frequency|visibility)$/i;
+
+  function looksEnumShaped(name, ps) {
+    if (ps.type !== "string" || Array.isArray(ps.enum)) return false;
+    if (ENUMISH_NAMES.test(name)) return true;
+    var d = typeof ps.description === "string" ? ps.description : "";
+    if (!d) return false;
+    if (/\bone of\b|\ballowed values\b|\bvalid (values|options)\b|\boptions are\b|\bmust be\b.*\bor\b/i.test(d)) return true;
+    if (/"[^"]{1,24}"(,| or) "[^"]{1,24}"/.test(d) || /'[^']{1,24}'(,| or) '[^']{1,24}'/.test(d)) return true;
+    if (/\b\w{2,16} ?\| ?\w{2,16}\b/.test(d)) return true;
+    if (/\b(celsius or fahrenheit|asc or desc|ascending or descending|true or false)\b/i.test(d)) return true;
+    return false;
+  }
+
+  function schemaDepth(s) {
+    if (!s || typeof s !== "object") return 0;
+    var branches = [];
+    if (Array.isArray(s.anyOf)) branches = branches.concat(s.anyOf);
+    if (Array.isArray(s.oneOf)) branches = branches.concat(s.oneOf);
+    if (Array.isArray(s.allOf)) branches = branches.concat(s.allOf);
+    var branchDepth = 0;
+    branches.forEach(function (b) { branchDepth = Math.max(branchDepth, schemaDepth(b)); });
+    if (s.type === "array" && s.items && !Array.isArray(s.items)) {
+      return Math.max(branchDepth, schemaDepth(s.items));
+    }
+    if (s.type === "object" || (s.properties && typeof s.properties === "object")) {
+      var child = 0;
+      var props = s.properties || {};
+      Object.keys(props).forEach(function (k) {
+        child = Math.max(child, schemaDepth(props[k]));
+      });
+      return Math.max(branchDepth, 1 + child);
+    }
+    return branchDepth;
+  }
+
+  function walkParams(schema, path, cb) {
+    if (!schema || typeof schema !== "object") return;
+    var props = schema.properties;
+    if (!props || typeof props !== "object") return;
+    Object.keys(props).forEach(function (name) {
+      var ps = props[name];
+      if (!ps || typeof ps !== "object") return;
+      var p = path ? path + "." + name : name;
+      cb(name, ps, p);
+      if (ps.type === "object" || (ps.properties && typeof ps.properties === "object")) {
+        walkParams(ps, p, cb);
+      }
+      if (ps.type === "array" && ps.items && !Array.isArray(ps.items)) {
+        walkParams(ps.items, p + "[]", cb);
+      }
+    });
+  }
+
+  function levenshtein(a, b) {
+    if (a === b) return 0;
+    var m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    var prev = [];
+    for (var j = 0; j <= n; j++) prev[j] = j;
+    for (var i = 1; i <= m; i++) {
+      var cur = [i];
+      for (var k = 1; k <= n; k++) {
+        cur[k] = Math.min(
+          prev[k] + 1,
+          cur[k - 1] + 1,
+          prev[k - 1] + (a.charAt(i - 1) === b.charAt(k - 1) ? 0 : 1)
+        );
+      }
+      prev = cur;
+    }
+    return prev[n];
+  }
+
+  function tokenSet(s) {
+    var out = Object.create(null); // null prototype: token "constructor" must not hit Object.prototype
+    String(s).toLowerCase().split(/[^a-z0-9]+/).forEach(function (w) {
+      if (w.length > 2) out[w] = true;
+    });
+    return Object.keys(out);
+  }
+
+  function jaccard(a, b) {
+    if (!a.length || !b.length) return 0;
+    var setB = Object.create(null);
+    b.forEach(function (w) { setB[w] = true; });
+    var inter = 0;
+    a.forEach(function (w) { if (setB[w]) inter++; });
+    return inter / (a.length + b.length - inter);
+  }
+
+  function lintTools(list) {
+    var findings = [];
+    function add(sev, tool, title, why) {
+      findings.push({ sev: sev, tool: tool, title: title, why: why });
+    }
+
+    list.forEach(function (t) {
+      // tool description
+      if (!t.description || !t.description.trim()) {
+        add("error", t.name, "Missing tool description",
+          "Descriptions are the primary signal the model uses to pick a tool. With nothing here it chooses by name alone, and names lie.");
+      } else if (t.description.trim().length < 20) {
+        add("warn", t.name, "Tool description is only " + t.description.trim().length + " characters",
+          "A one-liner rarely says when to call the tool. State the trigger condition, not just what it does.");
+      }
+
+      // schema presence and shape
+      if (!t.schema) {
+        add("error", t.name, "No input schema",
+          "The model has no parameter contract at all. It will invent argument names and shapes freely, and every call is a coin flip.");
+        return;
+      }
+      if (t.schema.type && t.schema.type !== "object") {
+        add("warn", t.name, 'Top-level schema type is "' + t.schema.type + '", not "object"',
+          "Tool call arguments are a JSON object. A non-object top level usually fails provider-side validation before the model even gets feedback.");
+      }
+
+      var props = t.schema.properties;
+      var hasProps = props && typeof props === "object" && Object.keys(props).length > 0;
+
+      // required array
+      if (hasProps && (!Array.isArray(t.schema.required) || t.schema.required.length === 0)) {
+        add("warn", t.name, 'No "required" array (every parameter reads as optional)',
+          "The model must guess which fields matter. Expect calls that omit the one field your handler actually needs.");
+      }
+
+      // nesting depth
+      var depth = schemaDepth(t.schema);
+      if (depth >= 3) {
+        add("warn", t.name, "Deeply nested input (" + depth + " levels of objects)",
+          "Every nesting level is another place to misplace a key. Models flatten or shuffle deep structures under pressure; prefer flat top-level parameters.");
+      }
+
+      // per-parameter checks (recursive)
+      walkParams(t.schema, "", function (pname, ps, path) {
+        var lower = pname.toLowerCase();
+        if (pname.length === 1 || VAGUE_NAMES.indexOf(lower) !== -1) {
+          add("warn", t.name, 'Vague parameter name "' + path + '"',
+            'The model maps intent to arguments through names. "' + pname + '" could mean anything, so it guesses - and the guess drifts between calls.');
+        }
+        if (!ps.description || !String(ps.description).trim()) {
+          add("warn", t.name, 'Parameter "' + path + '" has no description',
+            "Without a description the model infers meaning from the name and the task alone; ambiguous fields get filled with plausible-looking junk.");
+        }
+        if (looksEnumShaped(pname, ps)) {
+          add("warn", t.name, 'String parameter "' + path + '" looks like an enum but has no enum',
+            "The model will happily send variants your handler never expected. An enum turns an open guess into a closed choice the schema can enforce.");
+        }
+      });
+    });
+
+    // cross-tool: duplicate and near-duplicate names
+    var seen = Object.create(null); // null prototype: a tool named "constructor" is not a duplicate
+    list.forEach(function (t) {
+      if (seen[t.name]) {
+        add("error", t.name, 'Duplicate tool name "' + t.name + '"',
+          "Two tools with one name is undefined behavior: the model cannot address the second one at all.");
+      }
+      seen[t.name] = true;
+    });
+    for (var i = 0; i < list.length; i++) {
+      for (var j = i + 1; j < list.length; j++) {
+        var a = list[i].name, b = list[j].name;
+        if (a === b) continue;
+        var minLen = Math.min(a.length, b.length);
+        if (minLen >= 5 && levenshtein(a.toLowerCase(), b.toLowerCase()) <= 2) {
+          add("warn", a + " / " + b, "Tool names are nearly identical",
+            "Tool choice is a text-matching problem. Sibling names one or two edits apart get swapped, especially deep into a conversation.");
+        }
+        var da = list[i].description || "", db = list[j].description || "";
+        if (da.trim() && db.trim()) {
+          var sim = jaccard(tokenSet(da), tokenSet(db));
+          if (sim >= 0.65) {
+            add("warn", a + " / " + b, "Descriptions are near-duplicates (" + Math.round(sim * 100) + "% token overlap)",
+              "When two descriptions say the same thing, the model has no signal for which to call. It will alternate between them at random.");
+          }
+        }
+      }
+    }
+
+    // tool count
+    if (list.length > 20) {
+      add("warn", "(all tools)", list.length + " tools loaded",
+        "Selection error grows with tool count. Past roughly 20 tools, split by task, or defer rarely-used tools behind a search step.");
+    }
+
+    var rank = { error: 0, warn: 1, info: 2 };
+    findings.sort(function (x, y) { return rank[x.sev] - rank[y.sev]; });
+    return findings;
+  }
+
+  function renderLint(findings) {
+    var listEl = $("lintFindings");
+    var emptyEl = $("lintEmpty");
+    var summaryEl = $("lintSummary");
+    listEl.innerHTML = "";
+    summaryEl.hidden = false;
+
+    var errs = findings.filter(function (f) { return f.sev === "error"; }).length;
+    var warns = findings.filter(function (f) { return f.sev === "warn"; }).length;
+
+    if (findings.length === 0) {
+      emptyEl.hidden = false;
+      emptyEl.textContent = "No findings. The static checks pass - now prove it holds up: go to step 03 and try to complete a real task with these tools.";
+      summaryEl.textContent = tools.length + " tool" + (tools.length === 1 ? "" : "s") + " linted, 0 findings.";
+      return;
+    }
+    emptyEl.hidden = true;
+    summaryEl.textContent = tools.length + " tool" + (tools.length === 1 ? "" : "s") + " linted: " +
+      errs + " error" + (errs === 1 ? "" : "s") + ", " + warns + " warning" + (warns === 1 ? "" : "s") + ".";
+
+    findings.forEach(function (f) {
+      var li = document.createElement("li");
+      li.className = "f-" + f.sev;
+      li.innerHTML =
+        '<div class="finding-top"><span class="sev sev-' + f.sev + '">' + f.sev + "</span>" +
+        '<span class="finding-tool">' + esc(f.tool) + "</span></div>" +
+        '<p class="finding-title">' + esc(f.title) + "</p>" +
+        '<p class="finding-why"><b>why the model trips:</b> ' + esc(f.why) + "</p>";
+      listEl.appendChild(li);
+    });
+  }
+
+  /* ---------------- play mode: form generation ---------------- */
+
+  function renderToolList() {
+    var wrap = $("toolList");
+    wrap.innerHTML = "";
+    if (tools.length === 0) {
+      wrap.appendChild(el("div", { class: "empty", text: "Load definitions in step 01 first." }));
+      return;
+    }
+    tools.forEach(function (t, i) {
+      var btn = el("button", { type: "button", "aria-pressed": String(i === currentToolIndex) });
+      btn.appendChild(el("span", { class: "tname", text: t.name }));
+      btn.appendChild(el("span", {
+        class: "tdesc",
+        text: t.description ? t.description : "(no description)"
+      }));
+      btn.addEventListener("click", function () { selectTool(i); });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function constraintText(ps) {
+    var parts = [];
+    if (typeof ps.minimum === "number") parts.push("minimum " + ps.minimum);
+    if (typeof ps.maximum === "number") parts.push("maximum " + ps.maximum);
+    if (typeof ps.exclusiveMinimum === "number") parts.push("exclusiveMinimum " + ps.exclusiveMinimum);
+    if (typeof ps.exclusiveMaximum === "number") parts.push("exclusiveMaximum " + ps.exclusiveMaximum);
+    if (typeof ps.minLength === "number") parts.push("minLength " + ps.minLength);
+    if (typeof ps.maxLength === "number") parts.push("maxLength " + ps.maxLength);
+    if (typeof ps.pattern === "string") parts.push("pattern /" + ps.pattern + "/");
+    if (ps.type === "array" && ps.items && ps.items.type) parts.push("items: " + ps.items.type);
+    return parts.join(", ");
+  }
+
+  function selectTool(i) {
+    currentToolIndex = i;
+    renderToolList();
+    $("callResult").innerHTML = "";
+    var t = tools[i];
+    var wrap = $("callFormWrap");
+    wrap.innerHTML = "";
+    formFields = [];
+
+    var form = el("div", { class: "call-form" });
+    form.appendChild(el("h3", { text: t.name + "(...)" }));
+    form.appendChild(el("p", {
+      class: "tool-desc",
+      text: t.description ? t.description : "This tool has no description. You now know exactly as much as the model would."
+    }));
+
+    var schema = t.schema || {};
+    var props = schema.properties && typeof schema.properties === "object" ? schema.properties : {};
+    var required = Array.isArray(schema.required) ? schema.required : [];
+    var names = Object.keys(props);
+
+    if (names.length === 0) {
+      form.appendChild(el("p", { class: "help", text: "This tool declares no parameters. Submitting sends an empty object." }));
+    }
+
+    names.forEach(function (pname, idx) {
+      var ps = props[pname] && typeof props[pname] === "object" ? props[pname] : {};
+      var isReq = required.indexOf(pname) !== -1;
+      var fieldId = "field_" + i + "_" + idx;
+      var field = el("div", { class: "field" });
+
+      var label = el("label", { class: "field-label", for: fieldId });
+      label.appendChild(document.createTextNode(pname));
+      if (isReq) label.appendChild(el("span", { class: "req-star", text: "*", title: "required" }));
+      label.appendChild(el("span", { class: "type-tag", text: ps.type || "any" }));
+      field.appendChild(label);
+
+      var input, kind, enumValues = null;
+
+      if (Array.isArray(ps.enum) && ps.enum.length > 0) {
+        kind = "enum";
+        enumValues = ps.enum;
+        input = el("select", { id: fieldId });
+        input.appendChild(el("option", { value: "", text: isReq ? "-- choose a value --" : "-- omit --" }));
+        ps.enum.forEach(function (v, vi) {
+          input.appendChild(el("option", {
+            value: String(vi),
+            text: typeof v === "string" ? v : JSON.stringify(v)
+          }));
+        });
+      } else if (ps.type === "boolean") {
+        if (isReq) {
+          kind = "boolean-check";
+          input = el("input", { type: "checkbox", id: fieldId });
+          input.style.width = "auto";
+        } else {
+          kind = "boolean-select";
+          input = el("select", { id: fieldId });
+          input.appendChild(el("option", { value: "", text: "-- omit --" }));
+          input.appendChild(el("option", { value: "true", text: "true" }));
+          input.appendChild(el("option", { value: "false", text: "false" }));
+        }
+      } else if (ps.type === "integer" || ps.type === "number") {
+        kind = ps.type;
+        input = el("input", { type: "number", id: fieldId, step: ps.type === "integer" ? "1" : "any" });
+      } else if (ps.type === "string") {
+        kind = "string";
+        input = el("input", { type: "text", id: fieldId });
+      } else if (ps.type === "object" || ps.type === "array") {
+        kind = "json";
+        input = el("textarea", { id: fieldId, class: "json", rows: "3", spellcheck: "false" });
+        input.placeholder = ps.type === "object" ? '{"key": "value"}' : '["first", "second"]';
+      } else {
+        kind = "any";
+        input = el("textarea", { id: fieldId, class: "json", rows: "2", spellcheck: "false" });
+        input.placeholder = "Any JSON value, or plain text";
+      }
+
+      field.appendChild(input);
+
+      if (ps.description && String(ps.description).trim()) {
+        field.appendChild(el("p", { class: "help", text: String(ps.description) }));
+      } else {
+        field.appendChild(el("p", {
+          class: "help missing",
+          text: "No description. Fill this using pure guesswork - that is what the model does."
+        }));
+      }
+      var cons = constraintText(ps);
+      if (cons) field.appendChild(el("p", { class: "constraints", text: cons }));
+
+      form.appendChild(field);
+      formFields.push({ name: pname, kind: kind, input: input, enumValues: enumValues, required: isReq, ps: ps });
+    });
+
+    var bar = el("div", { class: "toolbar" });
+    var submit = el("button", { type: "button", class: "btn-primary", text: "Submit call" });
+    submit.addEventListener("click", submitCall);
+    bar.appendChild(submit);
+    bar.appendChild(el("span", { class: "spacer" }));
+    bar.appendChild(el("span", {
+      class: "chip",
+      text: required.length + " required / " + names.length + " params"
+    }));
+    form.appendChild(bar);
+    wrap.appendChild(form);
+  }
+
+  /* ---------------- argument assembly ---------------- */
+
+  function assembleArgs() {
+    var args = {};
+    var parseErrors = [];
+    formFields.forEach(function (f) {
+      if (f.kind === "enum") {
+        var sel = f.input.value;
+        if (sel === "") return; // omitted (validator flags required)
+        args[f.name] = f.enumValues[parseInt(sel, 10)];
+      } else if (f.kind === "boolean-check") {
+        args[f.name] = f.input.checked;
+      } else if (f.kind === "boolean-select") {
+        if (f.input.value === "") return;
+        args[f.name] = f.input.value === "true";
+      } else if (f.kind === "integer" || f.kind === "number") {
+        var raw = f.input.value.trim();
+        if (raw === "") return;
+        var num = Number(raw);
+        if (isNaN(num)) {
+          parseErrors.push('args.' + f.name + ': "' + raw + '" is not a number');
+          return;
+        }
+        args[f.name] = num;
+      } else if (f.kind === "string") {
+        if (f.input.value === "") return;
+        args[f.name] = f.input.value;
+      } else if (f.kind === "json") {
+        var txt = f.input.value.trim();
+        if (txt === "") return;
+        try {
+          args[f.name] = JSON.parse(txt);
+        } catch (e) {
+          parseErrors.push("args." + f.name + ": invalid JSON (" + (e && e.message ? e.message : "parse failed") + ")");
+        }
+      } else { // any
+        var t2 = f.input.value.trim();
+        if (t2 === "") return;
+        try { args[f.name] = JSON.parse(t2); }
+        catch (e2) { args[f.name] = t2; }
+      }
+    });
+    return { args: args, parseErrors: parseErrors };
+  }
+
+  /* ---------------- from-scratch schema validator ---------------- */
+
+  function typeOfValue(v) {
+    if (v === null) return "null";
+    if (Array.isArray(v)) return "array";
+    return typeof v;
+  }
+
+  function typeMatches(declared, v) {
+    var t = typeOfValue(v);
+    if (declared === "integer") return t === "number" && Number.isInteger(v);
+    if (declared === "number") return t === "number";
+    return declared === t;
+  }
+
+  function describeValue(v) {
+    var t = typeOfValue(v);
+    if (t === "number") return (Number.isInteger(v) ? "integer " : "number ") + v;
+    if (t === "string") {
+      var s = v.length > 40 ? v.slice(0, 40) + "..." : v;
+      return "string " + JSON.stringify(s);
+    }
+    if (t === "boolean") return "boolean " + v;
+    return t;
+  }
+
+  function validateValue(v, schema, path, errors) {
+    if (!schema || typeof schema !== "object") return;
+
+    if (Array.isArray(schema.enum)) {
+      var hit = schema.enum.some(function (e) {
+        return JSON.stringify(e) === JSON.stringify(v);
+      });
+      if (!hit) {
+        errors.push(path + ": " + JSON.stringify(v) + " is not one of " + JSON.stringify(schema.enum));
+        return;
+      }
+    }
+
+    var declared = schema.type;
+    if (typeof declared === "string") {
+      if (!typeMatches(declared, v)) {
+        errors.push(path + ": expected " + declared + ", got " + describeValue(v));
+        return;
+      }
+    } else if (Array.isArray(declared)) {
+      var any = declared.some(function (d) { return typeMatches(d, v); });
+      if (!any) {
+        errors.push(path + ": expected one of " + declared.join(" | ") + ", got " + describeValue(v));
+        return;
+      }
+    }
+
+    var t = typeOfValue(v);
+
+    if (t === "string") {
+      if (typeof schema.minLength === "number" && v.length < schema.minLength) {
+        errors.push(path + ": length " + v.length + " is below minLength " + schema.minLength);
+      }
+      if (typeof schema.maxLength === "number" && v.length > schema.maxLength) {
+        errors.push(path + ": length " + v.length + " is above maxLength " + schema.maxLength);
+      }
+      if (typeof schema.pattern === "string") {
+        try {
+          if (!new RegExp(schema.pattern).test(v)) {
+            errors.push(path + ": does not match pattern /" + schema.pattern + "/");
+          }
+        } catch (e) { /* unparseable pattern: skip, do not crash */ }
+      }
+    }
+
+    if (t === "number") {
+      if (typeof schema.minimum === "number" && v < schema.minimum) {
+        errors.push(path + ": " + v + " is below minimum " + schema.minimum);
+      }
+      if (typeof schema.maximum === "number" && v > schema.maximum) {
+        errors.push(path + ": " + v + " is above maximum " + schema.maximum);
+      }
+      if (typeof schema.exclusiveMinimum === "number" && v <= schema.exclusiveMinimum) {
+        errors.push(path + ": " + v + " must be greater than " + schema.exclusiveMinimum);
+      }
+      if (typeof schema.exclusiveMaximum === "number" && v >= schema.exclusiveMaximum) {
+        errors.push(path + ": " + v + " must be less than " + schema.exclusiveMaximum);
+      }
+    }
+
+    if (t === "object") {
+      var req = Array.isArray(schema.required) ? schema.required : [];
+      req.forEach(function (r) {
+        if (!(r in v)) errors.push(path + "." + r + ": required property is missing");
+      });
+      var props = schema.properties && typeof schema.properties === "object" ? schema.properties : {};
+      Object.keys(v).forEach(function (k) {
+        if (Object.prototype.hasOwnProperty.call(props, k)) {
+          validateValue(v[k], props[k], path + "." + k, errors);
+        } else if (schema.additionalProperties === false) {
+          errors.push(path + "." + k + ": unexpected property (additionalProperties is false)");
+        }
+      });
+    }
+
+    if (t === "array") {
+      if (typeof schema.minItems === "number" && v.length < schema.minItems) {
+        errors.push(path + ": " + v.length + " items is below minItems " + schema.minItems);
+      }
+      if (typeof schema.maxItems === "number" && v.length > schema.maxItems) {
+        errors.push(path + ": " + v.length + " items is above maxItems " + schema.maxItems);
+      }
+      if (schema.items && !Array.isArray(schema.items)) {
+        v.forEach(function (item, idx) {
+          validateValue(item, schema.items, path + "[" + idx + "]", errors);
+        });
+      }
+    }
+  }
+
+  /* ---------------- submit + result ---------------- */
+
+  function submitCall() {
+    if (currentToolIndex < 0) return;
+    var t = tools[currentToolIndex];
+    var assembled = assembleArgs();
+    var errors = assembled.parseErrors.slice();
+    if (errors.length === 0 && t.schema) {
+      validateValue(assembled.args, t.schema, "args", errors);
+    }
+    var valid = errors.length === 0;
+
+    var result = $("callResult");
+    if (valid) {
+      result.innerHTML =
+        '<p class="status-line"><span class="badge-pass">valid call</span> ' +
+        '<span class="detail">the arguments satisfy the schema - this call would reach your handler</span></p>' +
+        "<pre>" + esc(JSON.stringify({ tool: t.name, arguments: assembled.args }, null, 2)) + "</pre>";
+    } else {
+      result.innerHTML =
+        '<p class="status-line"><span class="badge-fail">invalid call</span> ' +
+        '<span class="detail">these are the exact validation errors the model would get back</span></p>' +
+        "<ul>" + errors.map(function (e) { return "<li>" + esc(e) + "</li>"; }).join("") + "</ul>" +
+        "<pre>" + esc(JSON.stringify({ tool: t.name, arguments: assembled.args }, null, 2)) + "</pre>";
+    }
+
+    transcript.push({
+      tool: t.name,
+      args: assembled.args,
+      valid: valid,
+      errors: errors,
+      notes: "",
+      at: new Date().toISOString()
+    });
+    renderTranscript();
+  }
+
+  /* ---------------- transcript ---------------- */
+
+  function renderTranscript() {
+    var listEl = $("transcriptList");
+    var emptyEl = $("transcriptEmpty");
+    listEl.innerHTML = "";
+    emptyEl.hidden = transcript.length > 0;
+
+    transcript.forEach(function (step, i) {
+      var box = el("div", { class: "t-step" });
+
+      var head = el("div", { class: "t-head" });
+      head.appendChild(el("span", { class: "idx", text: "#" + (i + 1) }));
+      head.appendChild(el("span", { class: "tname", text: step.tool }));
+      head.appendChild(el("span", {
+        class: step.valid ? "badge-pass" : "badge-fail",
+        text: step.valid ? "valid" : "invalid"
+      }));
+      head.appendChild(el("span", { class: "when", text: step.at.replace("T", " ").slice(0, 19) + " UTC" }));
+      box.appendChild(head);
+
+      var pre = el("pre");
+      pre.textContent = JSON.stringify(step.args, null, 2);
+      box.appendChild(pre);
+
+      if (!step.valid && step.errors.length) {
+        var ul = el("ul", { class: "t-errors" });
+        step.errors.forEach(function (e) { ul.appendChild(el("li", { text: e })); });
+        box.appendChild(ul);
+      }
+
+      var noteId = "note_" + i;
+      box.appendChild(el("label", { class: "notes-label", for: noteId, text: "Notes (what confused you here?)" }));
+      var ta = el("textarea", { id: noteId, rows: "1", placeholder: 'e.g. "I had no idea what unit values were legal"' });
+      ta.value = step.notes;
+      ta.addEventListener("input", function () { step.notes = ta.value; });
+      box.appendChild(ta);
+
+      listEl.appendChild(box);
+    });
+  }
+
+  function buildEvalCase() {
+    return {
+      task: $("taskInput").value.trim(),
+      steps: transcript.map(function (s) {
+        return { tool: s.tool, args: s.args, valid: s.valid, notes: s.notes };
+      })
+    };
+  }
+
+  function buildMarkdown() {
+    var lines = [];
+    lines.push("# Tool ergonomics transcript");
+    lines.push("");
+    lines.push("Task: " + ($("taskInput").value.trim() || "(none set)"));
+    if (detectedFormat) lines.push("Format: " + detectedFormat);
+    lines.push("");
+    transcript.forEach(function (s, i) {
+      lines.push("## Step " + (i + 1) + ": " + s.tool + " - " + (s.valid ? "VALID" : "INVALID"));
+      lines.push("");
+      lines.push("```json");
+      lines.push(JSON.stringify(s.args, null, 2));
+      lines.push("```");
+      if (!s.valid && s.errors.length) {
+        lines.push("");
+        lines.push("Validation errors:");
+        s.errors.forEach(function (e) { lines.push("- " + e); });
+      }
+      if (s.notes && s.notes.trim()) {
+        lines.push("");
+        lines.push("Notes: " + s.notes.trim());
+      }
+      lines.push("");
+    });
+    if (transcript.length === 0) lines.push("(no steps recorded)");
+    return lines.join("\n");
+  }
+
+  $("exportJsonBtn").addEventListener("click", function () {
+    if (transcript.length === 0) {
+      var b = $("exportJsonBtn");
+      var old = b.textContent;
+      b.textContent = "Nothing to export yet";
+      setTimeout(function () { b.textContent = old; }, 1400);
+      return;
+    }
+    downloadJSON(buildEvalCase(), "tool-eval-case.json");
+  });
+
+  $("copyMdBtn").addEventListener("click", function () {
+    copyText(buildMarkdown(), $("copyMdBtn"));
+  });
+
+  $("clearTranscriptBtn").addEventListener("click", function () {
+    transcript = [];
+    renderTranscript();
+    $("callResult").innerHTML = "";
+  });
+
+  /* ---------------- sample definitions (planted flaws) ---------------- */
+
+  var SAMPLE = [
+    {
+      name: "get_weather",
+      description: "Get the current weather for a location.",
+      input_schema: {
+        type: "object",
+        properties: {
+          location: { type: "string", description: "City and region, e.g. Richmond, VA" },
+          unit: { type: "string", description: "Temperature unit: celsius or fahrenheit" },
+          data: { type: "string" }
+        },
+        required: ["location"]
+      }
+    },
+    {
+      name: "create_calendar_event",
+      input_schema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Event title shown to attendees" },
+          start_time: { type: "string", description: "ISO 8601 start time, e.g. 2026-08-04T15:00:00Z" },
+          duration_minutes: { type: "integer", description: "Length of the event in minutes", minimum: 5, maximum: 480 },
+          attendees: { type: "array", items: { type: "string" }, description: "Attendee email addresses" }
+        }
+      }
+    },
+    {
+      name: "search_documents",
+      description: "Search the internal document index and return matching snippets.",
+      input_schema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Full-text search query", minLength: 2 },
+          limit: { type: "integer", description: "Maximum number of results to return", minimum: 1, maximum: 50 },
+          sort: { type: "string", enum: ["relevance", "newest", "oldest"], description: "Result ordering" },
+          filters: {
+            type: "object",
+            description: "Optional result filters",
+            properties: {
+              date_range: {
+                type: "object",
+                description: "Restrict results to a date window",
+                properties: {
+                  start: { type: "string", description: "ISO date, inclusive" },
+                  end: { type: "string", description: "ISO date, inclusive" }
+                }
+              },
+              author: { type: "string", description: "Only documents by this author" }
+            }
+          }
+        },
+        required: ["query"]
+      }
+    }
+  ];
+
+  /* ---------------- wire up parse ---------------- */
+
+  function runParse() {
+    var status = $("parseStatus");
+    var badge = $("formatBadge");
+    var result = parseDefinitions($("defsInput").value);
+
+    if (!result.ok) {
+      status.innerHTML = '<div class="error-box">' + esc(result.error) +
+        (result.context ? "<pre>" + esc(result.context) + "</pre>" : "") + "</div>";
+      badge.hidden = true;
+      return;
+    }
+
+    tools = result.tools;
+    detectedFormat = result.format;
+    currentToolIndex = -1;
+    formFields = [];
+
+    badge.hidden = false;
+    badge.className = "chip fmt";
+    badge.textContent = "Detected: " + result.format;
+
+    status.innerHTML = '<p class="status-line"><span class="badge-pass">parsed</span> ' +
+      '<span class="detail">' + tools.length + " tool" + (tools.length === 1 ? "" : "s") + " normalized" +
+      (result.note ? " (" + esc(result.note) + ")" : "") + ". Lint results are on the right; play mode is below.</span></p>";
+
+    renderLint(lintTools(tools));
+    renderToolList();
+    $("callFormWrap").innerHTML = '<div class="empty">Select a tool to generate its argument form from the schema.</div>';
+    $("callResult").innerHTML = "";
+  }
+
+  $("parseBtn").addEventListener("click", runParse);
+
+  $("sampleBtn").addEventListener("click", function () {
+    $("defsInput").value = JSON.stringify(SAMPLE, null, 2);
+    if (!$("taskInput").value) {
+      $("taskInput").value = "Book a 30 minute sync next Tuesday at 3pm and check the weather for the trip";
+    }
+    runParse();
+  });
+
+})();
+</script>
+</body>
+</html>
