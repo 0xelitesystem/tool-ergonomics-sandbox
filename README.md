@@ -26,6 +26,10 @@ It pairs with `json-schema-to-tool-definition` and `chatml-message-builder` in t
 
 Everything runs in your browser. Tool definitions are parsed locally and never uploaded; the page makes no network requests and has no external dependencies, no analytics, and no tracking. Exports are generated client-side and saved by your browser.
 
+## More
+
+Part of a catalog of single-file browser tools and plain-language references, all MIT licensed and dependency-free: [0xelitesystem.github.io](https://0xelitesystem.github.io/). Built by [elitesystem.ai](https://elitesystem.ai).
+
 ## License
 
 MIT
