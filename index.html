@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <title>Tool Ergonomics Sandbox - lint and hand-test your LLM tool definitions</title>
@@ -300,6 +300,41 @@ footer.site .wrap { display: flex; gap: 8px 22px; flex-wrap: wrap; align-items: 
   .panel-body, .panel-head { padding-left: 14px; padding-right: 14px; }
   header.site { padding-top: 26px; }
 }
+</style>
+<style>
+/* elitesystem brand tokens: chrome only, meaning preserved */
+:root, :root[data-theme="dark"] {
+  --accent: #d4ff3a;
+  --accent-ink: #0a0a0a;
+  --accent-soft: rgba(212,255,58,0.12);
+  --bg: #0a0a0a;
+  --bg-glow: rgba(212,255,58,0.12);
+  --border: #1f1f1d;
+  --border-strong: #2a2a27;
+  --code-bg: #111110;
+  --grid-line: #1f1f1d;
+  --muted: #6e6e68;
+  --panel: #111110;
+  --panel2: #161614;
+  --text: #e8e8e3;
+}
+:root[data-theme="light"] {
+  --accent: #2d6b00;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(45,107,0,0.08);
+  --bg: #e8ebef;
+  --bg-glow: rgba(45,107,0,0.08);
+  --border: #c8cdd5;
+  --border-strong: #aab0ba;
+  --code-bg: #dee2e8;
+  --grid-line: #c8cdd5;
+  --muted: #6e6e68;
+  --panel: #dee2e8;
+  --panel2: #d3d7df;
+  --text: #0a0a0a;
+}
+:root { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 </style>
 </head>
 <body>
