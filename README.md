@@ -2,9 +2,22 @@
 
 Lint your LLM tool definitions for model-tripping ambiguity, then play the model yourself: build tool calls by hand against live schema validation and export the transcript as an eval case.
 
+**Live demo:** https://0xelitesystem.github.io/tool-ergonomics-sandbox/
+
 ## Live demo
 
 https://0xelitesystem.github.io/tool-ergonomics-sandbox/
+
+## Use
+
+1. Paste tool definitions (Anthropic, OpenAI, or a bare array) into the Tool definitions box, or click Load sample definitions.
+2. Click Parse and lint, then read the Ergonomics lint findings.
+3. Write a task under Your task, then in Play the model pick a tool, fill the generated form, and submit it to see whether the arguments validate.
+4. Click Export eval case (JSON) or Copy as Markdown to keep the transcript.
+
+## Why this exists
+
+Models choose tools and fill arguments by reading names, descriptions and schemas, so any ambiguity there turns into wrong calls. This page lets you hit that ambiguity yourself before a model does. It is one HTML file with no dependencies, no tracking and no network calls, released under MIT.
 
 ## Features
 
@@ -25,6 +38,25 @@ It pairs with `json-schema-to-tool-definition` and `chatml-message-builder` in t
 ## Privacy
 
 Everything runs in your browser. Tool definitions are parsed locally and never uploaded; the page makes no network requests and has no external dependencies, no analytics, and no tracking. Exports are generated client-side and saved by your browser.
+
+The page saves one thing in localStorage: your light or dark theme choice, under the key `tes-theme`. Copy as Markdown writes to your clipboard only when you click it.
+
+## Run locally
+
+```
+git clone https://github.com/0xelitesystem/tool-ergonomics-sandbox
+cd tool-ergonomics-sandbox
+```
+
+Open `index.html` in any browser. Or serve the folder and visit http://localhost:8000:
+
+```
+python -m http.server 8000
+```
+
+## Build
+
+No build step. The whole tool is one `index.html` file with inline CSS and JavaScript.
 
 ## More
 
